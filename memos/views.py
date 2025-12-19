@@ -29,13 +29,8 @@ def memo_list(request: HttpRequest) -> HttpResponse:
         memos = memos.filter(tags__name=tag)
 
     # ソート処理
-    if unsafe_sort:
-        # 許可されたフィールドのみを使用
-        sort_field = parse_sort(sort)
-        memos = memos.order_by(sort_field)
-    else:
-        sort_field = parse_sort(sort)
-        memos = memos.order_by(sort_field)
+    sort_field = parse_sort(sort)
+    memos = memos.order_by(sort_field)
 
     context = {
         "memos": memos,
