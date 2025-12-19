@@ -1,5 +1,5 @@
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db.models import Q
 
@@ -21,27 +21,16 @@ def memo_list(request: HttpRequest) -> HttpResponse:
 
     memos = Memo.objects.all()
 
-    if legacy and q:
-        sql = (
-            "SELECT * FROM memos_memo "
-            "WHERE title LIKE '%" + q + "%' "
-            "OR body LIKE '%" + q + "%' "
-            "ORDER BY created_at DESC"
-        )
-        memos = Memo.objects.raw(sql)
+    # 検索処理（ORM使用で安全に）
+    if q:
+        memos = memos.filter(Q(title__icontains=q) | Q(body__icontains=q))
+    
+    if tag:
+        memos = memos.filter(tags__name=tag)
 
-    else:
-        if q:
-            sql = (
-                "SELECT * FROM memos_memo "
-                "WHERE title LIKE '%" + q + "%' "
-                "OR body LIKE '%" + q + "%' "
-                "ORDER BY created_at DESC"
-            )
-            memos = Memo.objects.raw(sql)
-        if tag:
-            memos = memos.filter(tags__name=tag)
-
+    # ソート処理
+    sort_field = parse_sort(sort)
+    memos = memos.order_by(sort_field)
 
     context = {
         "memos": memos,
@@ -56,7 +45,7 @@ def memo_list(request: HttpRequest) -> HttpResponse:
 
 
 def memo_detail(request: HttpRequest, memo_id: int) -> HttpResponse:
-    memo = Memo.objects.get(id=memo_id)  # 怪しいところ: 404にならない
+    memo = get_object_or_404(Memo, id=memo_id)
     return render(request, "memos/memo_detail.html", {"memo": memo})
 
 
@@ -83,7 +72,7 @@ def create_memo(request: HttpRequest) -> HttpResponse:
 
 def edit_memo(request: HttpRequest, memo_id: int) -> HttpResponse:
     error = None
-    memo = Memo.objects.get(id=memo_id)  # 怪しいところ: 404にならない
+    memo = get_object_or_404(Memo, id=memo_id)
 
     if request.method == "POST":
         title = (request.POST.get("title") or "").strip()
@@ -110,11 +99,11 @@ def edit_memo(request: HttpRequest, memo_id: int) -> HttpResponse:
 
 
 def delete_memo(request: HttpRequest, memo_id: int) -> HttpResponse:
-    # 怪しいところ: POST 以外でも削除できる（教材で直す）
-    try:
-        memo = Memo.objects.get(id=memo_id)
-        memo.delete()
-        messages.success(request, "削除しました")
-    except Exception:
-        messages.error(request, "削除に失敗しました")
+    if request.method != "POST":
+        messages.error(request, "不正なリクエストです")
+        return redirect("memo_list")
+    
+    memo = get_object_or_404(Memo, id=memo_id)
+    memo.delete()
+    messages.success(request, "削除しました")
     return redirect("memo_list")
